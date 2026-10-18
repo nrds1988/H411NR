@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disease Location Map - Health 411</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: Arial, sans-serif; background: #0f172a; color: #0f172a; display: flex; flex-direction: column; }
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; background: #0f172a; color: #fff; }
+  .top h1 { font-size: 16px; margin: 0; flex: 1 1 200px; }
+  .top a.back { color: #fff; text-decoration: none; background: #334155; padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; }
+  .top a.back:hover { background: #475569; }
+  .badge { font-size: 12px; font-weight: bold; padding: 5px 10px; border-radius: 999px; background: #64748b; color: #fff; }
+  .badge.live { background: #16a34a; } .badge.off { background: #d97706; } .badge.err { background: #dc2626; }
+
+  .filters { background: #fff; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border-bottom: 1px solid #cbd5e1; }
+  .tabs { display: inline-flex; border: 1px solid #2563eb; border-radius: 8px; overflow: hidden; }
+  .tabs button { border: 0; background: #fff; color: #2563eb; padding: 8px 14px; font-size: 13px; font-weight: bold; cursor: pointer; }
+  .tabs button + button { border-left: 1px solid #2563eb; }
+  .tabs button.on { background: #2563eb; color: #fff; }
+  .ctl { display: none; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ctl.on { display: inline-flex; }
+  .ctl button, .ctl input { font-size: 13px; padding: 7px 10px; border: 1px solid #94a3b8; border-radius: 6px; background: #f8fafc; }
+  .ctl button { cursor: pointer; font-weight: bold; }
+  .ctl button:hover { background: #e2e8f0; }
+  .ctl .lbl { font-size: 13px; font-weight: bold; min-width: 200px; text-align: center; }
+  .summary { margin-left: auto; font-size: 13px; color: #334155; }
+
+  .main { flex: 1; display: flex; min-height: 0; background: #e2e8f0; }
+  #map { flex: 1; min-height: 380px; background: #dbe4ee; }
+  .side { width: 270px; background: #fff; border-left: 1px solid #cbd5e1; padding: 12px; overflow-y: auto; }
+  .side h2 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-bottom: 1px solid #f1f5f9; font-size: 14px; cursor: pointer; }
+  .row input { margin: 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #64748b; flex: none; }
+  .row .n { margin-left: auto; font-weight: bold; }
+  .note { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.45; }
+  .fit { margin-top: 10px; width: 100%; padding: 8px; border: 0; background: #2563eb; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; }
+
+  .box { margin-top: 14px; padding-top: 12px; border-top: 2px solid #e2e8f0; }
+  .box select, .box input[type=number] { width: 100%; padding: 8px; font-size: 14px; border: 1px solid #94a3b8; border-radius: 6px; background: #f8fafc; margin-bottom: 6px; }
+  .box label.chk { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; margin: 4px 0 8px; }
+  .crow { padding: 7px 8px; margin-bottom: 5px; border-radius: 6px; background: #f1f5f9; border-left: 6px solid #64748b; font-size: 13px; cursor: pointer; line-height: 1.4; }
+  .crow:hover { background: #e2e8f0; } .crow small { color: #475569; }
+  .cbadge { width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: bold; font-size: 13px; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,.7); text-shadow: 0 0 2px #000; }
+  .lg-overlay { display:none; position:fixed; inset:0; background:#0f172a; z-index:9800; align-items:center; justify-content:center; padding:14px; } .lg-overlay.open { display:flex; }
+  .lg-card { background:#fff; width:min(380px,100%); border-radius:12px; padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.5); } .lg-card h3 { margin:0 0 6px; font-size:19px; } .lg-card p { margin:0 0 14px; font-size:13px; color:#64748b; }
+  .lg-card input { width:100%; padding:11px; font-size:15px; border:1px solid #94a3b8; border-radius:6px; margin-bottom:10px; }
+  .lg-card button { width:100%; padding:12px; font-size:15px; font-weight:bold; border:0; border-radius:6px; background:#2563eb; color:#fff; cursor:pointer; } .lg-card button:disabled { opacity:.5; } #lgMsg { margin-top:10px; font-size:13px; font-weight:bold; color:#b91c1c; }
+  .leaflet-overlay-pane path.dg-pt { filter: drop-shadow(0 0 1.5px rgba(0,0,0,.85)); }
+  .gn-label { background: rgba(255,255,255,.75); border: 0; box-shadow: none; font-size: 11px; font-weight: bold; color: #334155; padding: 0 4px; }
+  .gn-label:before { display: none; }
+  .pop { font-size: 13px; line-height: 1.5; }
+  .pop b.d { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; }
+
+  @media (max-width: 760px) {
+    .main { flex-direction: column; }
+    #map { flex: none; height: 62vh; }
+    .side { width: 100%; border-left: 0; border-top: 1px solid #cbd5e1; }
+    .summary { margin-left: 0; width: 100%; }
+    .ctl .lbl { min-width: 0; flex: 1; }
+    body { overflow-y: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>🗺️ Disease Location Map — <span id="areaTitle">Patient GPS Points</span></h1>
+  <span id="status" class="badge">Loading...</span>
+  <a class="back" href="index.html">⬅ Back to Portal</a>
+</div>
+
+<div class="filters">
+  <div class="tabs" id="tabs">
+    <button data-m="week" class="on">Weekly</button>
+    <button data-m="month">Monthly</button>
+    <button data-m="custom">Custom</button>
+    <button data-m="all">All</button>
+  </div>
+
+  <div class="ctl on" id="c-week">
+    <button id="wPrev">◀</button><span class="lbl" id="wLbl"></span><button id="wNext">▶</button><button id="wNow">This week</button>
+  </div>
+  <div class="ctl" id="c-month">
+    <button id="mPrev">◀</button><span class="lbl" id="mLbl"></span><button id="mNext">▶</button><button id="mNow">This month</button>
+  </div>
+  <div class="ctl" id="c-custom">
+    <label>From <input type="date" id="cFrom"></label>
+    <label>To <input type="date" id="cTo"></label>
+  </div>
+  <div class="summary" id="summary"></div>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="side">
+    <h2>Disease colour index</h2>
+    <div id="legend"></div>
+    <button class="fit" id="fitPts">Zoom to points</button>
+
+    <div class="box">
+      <h2>Buffer radius &amp; clusters</h2>
+      <select id="bufSel">
+        <option value="0">Off (points only)</option>
+        <option value="100">100 m</option>
+        <option value="250">250 m</option>
+        <option value="500">500 m</option>
+        <option value="1000">1 km</option>
+        <option value="custom">Custom...</option>
+      </select>
+      <input type="number" id="bufCustom" min="10" max="5000" step="10" placeholder="Radius in metres (e.g. 300)" style="display:none">
+      <label class="chk"><input type="checkbox" id="sameDisease" checked> Cluster same disease only</label>
+      <div id="clusterList"></div>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<div class="lg-overlay" id="loginOverlay"><div class="lg-card">
+  <h3>🔐 Health 411 — Sign in</h3><p>Only staff allowed by the PHI can see the patient map.</p>
+  <input type="email" id="lgEmail" placeholder="Email" autocomplete="username"><input type="password" id="lgPass" placeholder="Password" autocomplete="current-password">
+  <button type="button" id="lgBtn">Sign in</button><div id="lgMsg"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+<script src="config.js"></script>
+<script src="area-geo.js"></script>
+<script>
+/* Area settings + boundary come from config.js and area-geo.js (made by setup.html) */
+const APP = window.APP_CONFIG || null;
+const PHI_GEOJSON = window.AREA_GEOJSON || { type: 'FeatureCollection', features: [] };
+const firebaseConfig = (APP && APP.firebase) || {};
+
+/* ---------- disease colour index ---------- */
+const CATS = [
+  { key: 'dengue',     label: 'Dengue',        color: '#dc2626', test: s => s.includes('dengue') },
+  { key: 'tb',         label: 'Tuberculosis',  color: '#2563eb', test: s => s.includes('tubercul') || s === 'tb' },
+  { key: 'lepto',      label: 'Leptospirosis', color: '#16a34a', test: s => s.includes('leptospir') },
+  { key: 'chickenpox', label: 'Chicken pox',   color: '#facc15', test: s => s.includes('chicken') },
+  { key: 'dysentery',  label: 'Dysentery',     color: '#ec4899', test: s => s.includes('dysentery') },
+  { key: 'other',      label: 'Other',         color: '#000000', test: () => true }
+];
+const catOf = name => CATS.find(c => c.test(String(name || '').toLowerCase().trim()));
+const visible = Object.fromEntries(CATS.map(c => [c.key, true]));
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, '0');
+const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function isoWeek(mon) {
+  const th = new Date(mon); th.setDate(th.getDate() + 3);
+  const jan4 = new Date(th.getFullYear(), 0, 4), w1 = new Date(jan4); w1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  return Math.round((mon - w1) / 604800000) + 1;
+}
+function parseGps(v) {
+  if (!v) return null;
+  const m = String(v).match(/-?\d+(?:\.\d+)?/g);
+  if (!m || m.length < 2) return null;
+  let a = parseFloat(m[0]), b = parseFloat(m[1]);
+  if (a > 60 && b < 20) [a, b] = [b, a];                 // lng, lat typed the wrong way round
+  if (a < 5 || a > 10.5 || b < 79 || b > 82.5) return null; // outside Sri Lanka
+  return [a, b];
+}
+function recDate(r) {
+  const ok = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+  if (ok(r.inDateNotified)) return r.inDateNotified;
+  if (ok(r.inDateConfirmed)) return r.inDateConfirmed;
+  return (r.timestamp || '').slice(0, 10);
+}
+
+/* ---------- map ---------- */
+const map = L.map('map');
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const esri = (name, o) => L.tileLayer(ESRI + name + '/MapServer/tile/{z}/{y}/{x}', Object.assign({ attribution: 'Tiles &copy; Esri', maxZoom: 19 }, o || {}));
+const baseTopo = esri('World_Topo_Map');
+const baseStreet = esri('World_Street_Map');
+const baseSat = esri('World_Imagery', { maxNativeZoom: 18 });
+const baseHybrid = L.layerGroup([
+  esri('World_Imagery', { maxNativeZoom: 18 }),
+  esri('Reference/World_Transportation', { maxNativeZoom: 18 }),
+  esri('Reference/World_Boundaries_and_Places', { maxNativeZoom: 18 })
+]);
+const BASES = { '🗺️ Topo': baseTopo, '🛣️ Street': baseStreet, '🛰️ Satellite': baseSat, '🛰️ Satellite + Labels': baseHybrid };
+let savedBase = 'Topo'; try { savedBase = localStorage.getItem('dm_base') || 'Topo'; } catch (e) {}
+(Object.keys(BASES).find(k => k.endsWith(savedBase)) ? BASES[Object.keys(BASES).find(k => k.endsWith(savedBase))] : baseTopo).addTo(map);
+L.control.layers(BASES, null, { position: 'topright', collapsed: true }).addTo(map);
+map.createPane('pts').style.zIndex = 650;
+const GN_STYLE_MAP = { color: '#334155', weight: 1.5, fillColor: '#94a3b8', fillOpacity: 0.08 };
+const GN_STYLE_SAT = { color: '#ffffff', weight: 2.5, fillColor: '#ffffff', fillOpacity: 0.04 };
+const gnLayer = L.geoJSON(PHI_GEOJSON, {
+  style: GN_STYLE_MAP,
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.GND_N || '', { permanent: true, direction: 'center', className: 'gn-label' })
+}).addTo(map);
+const areaBounds = gnLayer.getBounds().isValid() ? gnLayer.getBounds() : L.latLngBounds([[5.9, 79.6], [9.9, 81.9]]);   // whole Sri Lanka until a boundary is set up
+map.on('baselayerchange', e => {
+  const sat = /Satellite/.test(e.name);
+  gnLayer.setStyle(sat ? GN_STYLE_SAT : GN_STYLE_MAP);
+  try { localStorage.setItem('dm_base', e.name.replace(/^\S+\s/, '')); } catch (x) {}
+});
+map.fitBounds(areaBounds);
+const ptLayer = L.layerGroup().addTo(map);
+
+/* ---------- buffer circles + cluster analysis ---------- */
+map.createPane('buf').style.zIndex = 450;
+map.createPane('clu').style.zIndex = 560;
+const bufLayer = L.layerGroup().addTo(map), cluLayer = L.layerGroup().addTo(map);
+let bufR = 0, clusters = [];
+const strokeOf = c => c.key === 'chickenpox' ? '#ca8a04' : c.color;
+function hav(a, b) {
+  const R = 6371000, t = Math.PI / 180, dLa = (b[0] - a[0]) * t, dLo = (b[1] - a[1]) * t;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * t) * Math.cos(b[0] * t) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function hull(pts) {   // convex hull of [lat,lng] points
+  const P = pts.map(p => [p[1], p[0]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (const p of P.slice().reverse()) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  lo.pop(); up.pop();
+  return lo.concat(up).map(p => [p[1], p[0]]);
+}
+function drawBuffers(vis) {
+  bufLayer.clearLayers(); cluLayer.clearLayers(); clusters = [];
+  const box = $('clusterList');
+  if (!bufR) { box.innerHTML = '<div class="note">Choose a radius to draw a boundary round every point and find clusters.</div>'; return; }
+  vis.forEach(v => L.circle(v.p, { pane: 'buf', radius: bufR, color: strokeOf(v.cat), weight: 1.5, dashArray: '5 4', fillColor: v.cat.color, fillOpacity: 0.14, interactive: false }).addTo(bufLayer));
+
+  const same = $('sameDisease').checked, par = vis.map((_, i) => i);
+  const find = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+  for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+    if (same && vis[i].cat.key !== vis[j].cat.key) continue;
+    if (hav(vis[i].p, vis[j].p) <= 2 * bufR) par[find(i)] = find(j);   // buffers touch / overlap
+  }
+  const groups = {};
+  vis.forEach((v, i) => (groups[find(i)] = groups[find(i)] || []).push(v));
+  clusters = Object.values(groups).filter(g => g.length >= 2).sort((a, b) => b.length - a.length);
+
+  let inCl = 0, html = '';
+  clusters.forEach((g, i) => {
+    inCl += g.length;
+    const mix = {}; g.forEach(v => mix[v.cat.key] = (mix[v.cat.key] || 0) + 1);
+    const top = CATS.find(c => c.key === Object.keys(mix).sort((a, b) => mix[b] - mix[a])[0]);
+    let span = 0; for (let a = 0; a < g.length; a++) for (let b = a + 1; b < g.length; b++) span = Math.max(span, hav(g[a].p, g[b].p));
+    const mixTxt = CATS.filter(c => mix[c.key]).map(c => `${c.label} ${mix[c.key]}`).join(', ');
+    const pts = g.map(v => v.p), h = hull(pts), col = strokeOf(top);
+    const spanTxt = span >= 1000 ? (span / 1000).toFixed(2) + ' km' : Math.round(span) + ' m';
+    g.bounds = L.latLngBounds(pts); g.info = { mixTxt, spanTxt, top };
+    if (h.length >= 3) L.polygon(h, { pane: 'clu', color: col, weight: 3, fillColor: top.color, fillOpacity: 0.1, dashArray: '2 6', interactive: false }).addTo(cluLayer);
+    else L.polyline(pts, { pane: 'clu', color: col, weight: 3, dashArray: '2 6', interactive: false }).addTo(cluLayer);
+    const c = g.bounds.getCenter();
+    L.marker(c, { pane: 'clu', icon: L.divIcon({ className: '', html: `<div class="cbadge" style="background:${top.color}">${g.length}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }) })
+      .bindPopup(`<div class="pop"><b>Cluster ${i + 1}</b>: ${g.length} cases<br>${esc(mixTxt)}<br>Spread: ${spanTxt}</div>`).addTo(cluLayer);
+    html += `<div class="crow" data-i="${i}" style="border-left-color:${strokeOf(top)}"><b>Cluster ${i + 1}</b> · ${g.length} cases<br><small>${esc(mixTxt)} · spread ${spanTxt}</small></div>`;
+  });
+  const rTxt = bufR >= 1000 ? (bufR / 1000) + ' km' : bufR + ' m';
+  box.innerHTML = `<div class="note" style="margin:0 0 8px"><b>${clusters.length}</b> cluster${clusters.length === 1 ? '' : 's'} at ${rTxt} · ${inCl} of ${vis.length} cases inside clusters.</div>`
+    + (html || '<div class="note">No clusters: no two cases are close enough at this radius.</div>')
+    + `<div class="note">Cluster = 2 or more cases whose buffers touch/overlap (distance ≤ 2 × radius).</div>`;
+}
+$('clusterList').addEventListener('click', e => {
+  const r = e.target.closest('.crow'); if (r && clusters[+r.dataset.i]) map.fitBounds(clusters[+r.dataset.i].bounds.pad(0.6), { maxZoom: 18 });
+});
+function setRadius() {
+  const v = $('bufSel').value;
+  $('bufCustom').style.display = v === 'custom' ? '' : 'none';
+  bufR = v === 'custom' ? Math.max(0, Math.min(5000, parseFloat($('bufCustom').value) || 0)) : parseFloat(v);
+  render();
+}
+$('bufSel').onchange = setRadius; $('bufCustom').oninput = setRadius; $('sameDisease').onchange = render;
+
+/* ---------- filter state ---------- */
+let mode = 'week';
+let wk = mondayOf(new Date());
+let mo = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let records = [];
+
+function range() {
+  if (mode === 'week') { const e = new Date(wk); e.setDate(e.getDate() + 6); return [fmt(wk), fmt(e)]; }
+  if (mode === 'month') { return [fmt(mo), fmt(new Date(mo.getFullYear(), mo.getMonth() + 1, 0))]; }
+  if (mode === 'custom') return [$('cFrom').value || '0000-00-00', $('cTo').value || '9999-99-99'];
+  return ['0000-00-00', '9999-99-99'];
+}
+function labels() {
+  const e = new Date(wk); e.setDate(e.getDate() + 6);
+  $('wLbl').textContent = `Week ${isoWeek(wk)} · ${MON[wk.getMonth()]} ${wk.getDate()} – ${MON[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+  $('mLbl').textContent = `${MONL[mo.getMonth()]} ${mo.getFullYear()}`;
+}
+
+/* ---------- render ---------- */
+function render() {
+  labels();
+  const [from, to] = range();
+  const inRange = records.filter(r => { const d = recDate(r); return d && d >= from && d <= to; });
+  const withGps = [], noGps = [];
+  inRange.forEach(r => { const p = parseGps(r.inGpsCoords); (p ? withGps : noGps).push({ r, p }); });
+
+  const counts = Object.fromEntries(CATS.map(c => [c.key, 0]));
+  withGps.forEach(x => { x.cat = catOf(x.r.inDiseaseConfirmed || x.r.inDiseaseNotified); counts[x.cat.key]++; });
+
+  ptLayer.clearLayers();
+  let shown = 0; const vis = [];
+  const groups = {};   // cases with the same disease + same coordinates share one marker
+  withGps.forEach(({ r, p, cat }) => {
+    if (!visible[cat.key]) return;
+    shown++; vis.push({ p, cat });
+    (groups[cat.key + '|' + p[0].toFixed(5) + ',' + p[1].toFixed(5)] = groups[cat.key + '|' + p[0].toFixed(5) + ',' + p[1].toFixed(5)] || { p, cat, list: [] }).list.push(r);
+  });
+  Object.values(groups).forEach(({ p, cat, list }) => {
+    const cases = list.map(r => {
+      const disease = r.inDiseaseConfirmed || r.inDiseaseNotified || 'Not specified';
+      const age = r.inPatientAge ? `<br>Age/Sex: ${esc(r.inPatientAge)}${r.sexOption ? ' / ' + esc(r.sexOption) : ''}` : '';
+      return `<div style="${list.length > 1 ? 'border-top:1px solid #e2e8f0;padding-top:6px;margin-top:6px' : ''}"><b class="d" style="background:${cat.color};${cat.key === 'chickenpox' ? 'color:#000' : ''}">${esc(disease)}</b><br>`
+        + `Ref No: <b>${esc(r.inPhiRefNo || '-')}</b><br>Date: ${esc(recDate(r))}<br>GN: ${esc(r.inGNArea || '-')}${age}</div>`;
+    }).join('');
+    const head = list.length > 1 ? `<div style="font-weight:bold;margin-bottom:4px">${list.length} cases at this exact location</div>` : '';
+    const foot = `<div style="margin-top:6px"><span style="color:#64748b">${p[0].toFixed(5)}, ${p[1].toFixed(5)}</span><br>`
+      + `<a href="https://www.google.com/maps/@?api=1&amp;map_action=pano&amp;viewpoint=${p[0]},${p[1]}" target="_blank" rel="noopener">🚶 Google Street View</a><br>`
+      + `<a href="https://www.google.com/maps/@?api=1&amp;map_action=map&amp;center=${p[0]},${p[1]}&amp;zoom=19&amp;basemap=satellite" target="_blank" rel="noopener">🛰️ Google Satellite</a></div>`;
+    L.circleMarker(p, { pane: 'pts', radius: list.length > 1 ? 11 : 9, className: 'dg-pt', fillColor: cat.color, fillOpacity: 0.95, color: '#fff', weight: 2 })
+      .bindPopup(`<div class="pop" style="max-height:240px;overflow-y:auto">${head}${cases}${foot}</div>`, { maxHeight: 260 })
+      .addTo(ptLayer);
+    if (list.length > 1) L.marker(p, { pane: 'pts', interactive: false, icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+      html: `<div style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:bold 12px Arial;color:${cat.key === 'chickenpox' ? '#000' : '#fff'};text-shadow:${cat.key === 'chickenpox' ? 'none' : '0 0 2px #000'}">${list.length}</div>` }) }).addTo(ptLayer);
+  });
+
+  drawBuffers(vis);
+  $('legend').innerHTML = CATS.map(c => `<label class="row"><input type="checkbox" data-k="${c.key}" ${visible[c.key] ? 'checked' : ''}>`
+    + `<span class="dot" style="background:${c.color}"></span><span>${c.label}</span><span class="n">${counts[c.key]}</span></label>`).join('');
+  $('summary').textContent = `${shown} point${shown === 1 ? '' : 's'} on map · ${inRange.length} record${inRange.length === 1 ? '' : 's'} in period`;
+  $('note').innerHTML = noGps.length
+    ? `⚠️ ${noGps.length} record${noGps.length === 1 ? ' has' : 's have'} no valid GPS coordinates, so cannot be shown.`
+    : 'All records in this period have GPS coordinates.';
+}
+
+/* ---------- controls ---------- */
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.m;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  ['week', 'month', 'custom'].forEach(m => $('c-' + m).classList.toggle('on', m === mode));
+  render();
+});
+$('wPrev').onclick = () => { wk.setDate(wk.getDate() - 7); render(); };
+$('wNext').onclick = () => { wk.setDate(wk.getDate() + 7); render(); };
+$('wNow').onclick = () => { wk = mondayOf(new Date()); render(); };
+$('mPrev').onclick = () => { mo = new Date(mo.getFullYear(), mo.getMonth() - 1, 1); render(); };
+$('mNext').onclick = () => { mo = new Date(mo.getFullYear(), mo.getMonth() + 1, 1); render(); };
+$('mNow').onclick = () => { const n = new Date(); mo = new Date(n.getFullYear(), n.getMonth(), 1); render(); };
+$('cFrom').onchange = $('cTo').onchange = render;
+$('legend').addEventListener('change', e => { const k = e.target.dataset.k; if (k) { visible[k] = e.target.checked; render(); } });
+$('fitPts').onclick = () => {
+  const pts = []; ptLayer.eachLayer(l => pts.push(l.getLatLng()));
+  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 17 }); else map.fitBounds(areaBounds);
+};
+{ const t = fmt(new Date()), m = fmt(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); $('cFrom').value = m; $('cTo').value = t; }
+
+/* ---------- data: Firebase live, IndexedDB fallback ---------- */
+function setStatus(txt, cls) { const s = $('status'); s.textContent = txt; s.className = 'badge ' + (cls || ''); }
+
+function loadLocal() {
+  try {
+    const req = indexedDB.open('Health411OfflineDB');
+    req.onupgradeneeded = e => e.target.transaction.abort();   // never create an empty DB (it would block the portal's own store)
+    req.onsuccess = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('patient_records')) { setStatus('No data found', 'err'); return; }
+      db.transaction('patient_records').objectStore('patient_records').getAll().onsuccess = ev => {
+        records = ev.target.result || []; setStatus('🟠 Local copy (offline)', 'off'); render();
+      };
+    };
+    req.onerror = () => setStatus('Could not load data', 'err');
+  } catch (err) { setStatus('Could not load data', 'err'); }
+}
+
+if (APP && APP.areaName) { $('areaTitle').textContent = APP.areaName + ' — Patient GPS Points'; document.title = 'Disease Location Map - ' + APP.areaName; }
+let fb = null;
+try { if (!firebaseConfig.apiKey || !firebaseConfig.databaseURL) throw new Error('Firebase not configured'); firebase.initializeApp(firebaseConfig); fb = firebase.database(); } catch (e) { console.log(e.message); }
+if (!APP || !PHI_GEOJSON.features.length) setStatus('⚙️ Run setup.html first', 'err');
+function startCloud() {
+  const fallback = setTimeout(loadLocal, 8000);   // if the cloud does not answer, use the local copy
+  fb.ref('health_reports').on('value', snap => {
+    clearTimeout(fallback);
+    const d = snap.val() || {};
+    records = Object.keys(d).map(k => ({ ...d[k], id: k }));
+    setStatus('🟢 Cloud live', 'live'); render();
+  }, err => { clearTimeout(fallback); console.error(err); setStatus('🔒 Not allowed / not signed in', 'err'); loadLocal(); });
+}
+let auth = null;
+if (fb && typeof firebase.auth === 'function' && !(APP && APP.requireLogin === false)) auth = firebase.auth();
+if (auth) {
+  const ov = $('loginOverlay'); let started = false;
+  ov.classList.add('open');
+  auth.onAuthStateChanged(u => {
+    if (u) { ov.classList.remove('open'); if (!started && navigator.onLine) { started = true; startCloud(); } else if (!navigator.onLine) loadLocal(); }
+    else { started = false; ov.classList.add('open'); }
+  });
+  const go = async () => {
+    const em = $('lgEmail').value.trim(), pw = $('lgPass').value; if (!em || !pw) { $('lgMsg').textContent = 'Enter your email and password.'; return; }
+    $('lgBtn').disabled = true; $('lgMsg').textContent = '';
+    try { await auth.signInWithEmailAndPassword(em, pw); $('lgPass').value = ''; }
+    catch (e) { $('lgMsg').textContent = /invalid|wrong|not-found/.test(e.code || '') ? 'Wrong email or password.' : (e.code === 'auth/network-request-failed' ? 'No internet.' : (e.message || 'Sign-in failed.')); }
+    $('lgBtn').disabled = false;
+  };
+  $('lgBtn').addEventListener('click', go);
+  ['lgEmail', 'lgPass'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') go(); }));
+} else if (fb && navigator.onLine) startCloud(); else loadLocal();
+render();
+</script>
+</body>
+</html>
